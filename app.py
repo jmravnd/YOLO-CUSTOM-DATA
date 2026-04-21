@@ -1,11 +1,17 @@
 from flask import Flask, render_template, request
-from ultralytics import YOLO
 import os
+import uuid
 
 app = Flask(__name__)
 
-# Load your trained classification model
-model = YOLO("runs/classify/train/weights/best.pt")
+model = None
+
+def get_model():
+    global model
+    if model is None:
+        from ultralytics import YOLO
+        model = YOLO("runs/classify/train/weights/best.pt")
+    return model
 
 @app.route("/")
 def home():
@@ -14,19 +20,17 @@ def home():
 @app.route("/predict", methods=["POST"])
 def predict():
     file = request.files["image"]
-    
-    filepath = os.path.join("static", file.filename)
+
+    filename = str(uuid.uuid4()) + ".jpg"
+    filepath = os.path.join("static", filename)
     file.save(filepath)
 
-    results = model(filepath)
+    results = get_model()(filepath)
 
-    # Get prediction
     probs = results[0].probs
     top_class = probs.top1
-    class_name = model.names[top_class]
-
-    # Accuracy / confidence score
-    confidence = float(probs.top1conf) * 100  # convert to percentage
+    class_name = get_model().names[top_class]
+    confidence = float(probs.top1conf) * 100
 
     return render_template(
         "index.html",
@@ -36,4 +40,5 @@ def predict():
     )
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port, debug=False)
